@@ -23,7 +23,7 @@ class SoftwareRenderer : public SVGRenderer {
 
   // Set sample rate
   virtual void set_sample_rate( size_t sample_rate ) = 0;
-  
+
   // Set render target
   virtual void set_render_target( unsigned char* render_target,
                                   size_t width, size_t height ) = 0;
@@ -49,7 +49,7 @@ class SoftwareRenderer : public SVGRenderer {
   size_t sample_rate;
 
   // Render target memory location
-  unsigned char* render_target; 
+  unsigned char* render_target;
 
   // Target buffer dimension (in pixels)
   size_t target_w; size_t target_h;
@@ -66,20 +66,24 @@ class SoftwareRenderer : public SVGRenderer {
 class SoftwareRendererImp : public SoftwareRenderer {
  public:
 
-  SoftwareRendererImp( ) : SoftwareRenderer( ) { }
+  SoftwareRendererImp( ) : SoftwareRenderer( ) { super_sample_buffer = NULL;} // { super_sample_buffer = NULL;}
 
   // draw an svg input to render target
   void draw_svg( SVG& svg );
 
   // set sample rate
   void set_sample_rate( size_t sample_rate );
-  
+  void set_sample_buf(int x, int y, Color color);
   // set render target
   void set_render_target( unsigned char* target_buffer,
                           size_t width, size_t height );
-
  private:
+  unsigned char* super_sample_buffer;
 
+
+  // Init //
+  // allocates a buf of the correct size for the supersampling target
+  unsigned char* create_supersampling_buf();
   // Primitive Drawing //
 
   // Draws an SVG element
@@ -146,7 +150,7 @@ class SoftwareRendererRef : public SoftwareRenderer {
 
   // set sample rate
   void set_sample_rate( size_t sample_rate );
-  
+
   // set render target
   void set_render_target( unsigned char* target_buffer,
                           size_t width, size_t height );
