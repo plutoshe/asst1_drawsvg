@@ -456,7 +456,7 @@ void SoftwareRendererImp::rasterize_image( float x0, float y0,
   float ylen = y1 - y0;
   for (int x = floor(x0); x <= round(x1 + 0.5); x++) {
     for (int y = floor(y0); y <= round(y1 + 0.5); y++) {
-      color = sampler->sample_nearest(tex, (x - x0) / xlen, (y - y0) / ylen);
+      color = sampler->sample_bilinear(tex, (x - x0) / xlen, (y - y0) / ylen);
       set_sample_buf(x, y, color);
     }
   }

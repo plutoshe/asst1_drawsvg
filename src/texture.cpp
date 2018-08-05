@@ -84,18 +84,16 @@ Color Sampler2DImp::sample_nearest(Texture& tex,
   // Task ?: Implement nearest neighbour interpolation
 
   // return magenta for invalid level
+  if ( level >= tex.mipmap.size() ) {
+    std::cerr << "Invalid start level";
+  }
+
   MipLevel& mip = tex.mipmap[level];
   int x = floor(mip.width * u);
   int y = floor(mip.height * v);
   Color color;
-  float dst[4];
-  uint8_to_float(&dst[0], &mip.texels[4 * (mip.width * y + x)]);
-  color.r = dst[0];
-  color.g = dst[1];
-  color.b = dst[2];
-  color.a = dst[3];
+  uint8_to_float(&color.r, &mip.texels[4 * (mip.width * y + x)]);
   return color;
-
 }
 
 Color Sampler2DImp::sample_bilinear(Texture& tex,
@@ -106,7 +104,36 @@ Color Sampler2DImp::sample_bilinear(Texture& tex,
 
   // return magenta for invalid level
 
-  return Color(1,0,1,1);
+  // map u,v to texel coords
+  // do index math to get access to nearest texel and its neighbors
+  // compute weight based on distance of u,v to texel center.
+  // return weighted average of color components.
+  if ( level >= tex.mipmap.size() ) {
+    std::cerr << "Invalid start level";
+  }
+
+  MipLevel& mip = tex.mipmap[level];
+  u = mip.width * u - 0.5;
+  v = mip.height * v - 0.5;
+  int x = floor(u);
+  int y = floor(v);
+
+
+  float u_ratio = u - x;
+  float v_ratio = v - y;
+  float u_opposite = 1 - u_ratio;
+  float v_opposite = 1 - v_ratio;
+  unsigned char result[4];
+  for (int color_id = 0; color_id < 4; color_id++) {
+    result[color_id] = (mip.texels[4 * (mip.width * y + x) + color_id] * u_opposite +
+                        mip.texels[4 * (mip.width * y + x + 1) + color_id] * u_ratio) * v_opposite
+                      +(mip.texels[4 * (mip.width * (y + 1) + x) + color_id] * u_opposite +
+                        mip.texels[4 * (mip.width * (y + 1) + x + 1) + color_id] * u_ratio) * v_ratio;
+  }
+
+  Color color;
+  uint8_to_float(&color.r, &result[0]);
+  return color;
 
 }
 
@@ -117,6 +144,11 @@ Color Sampler2DImp::sample_trilinear(Texture& tex,
   // Task 8: Implement trilinear filtering
 
   // return magenta for invalid level
+
+  // u_scale and v_scale help to determine the level as a float.
+  // then bilinear sample the floor(level) and ceil(level).
+  // then linear interpolate between those two colors based on where
+  // the float level falls between floor and ceiling.
   return Color(1,0,1,1);
 
 }
