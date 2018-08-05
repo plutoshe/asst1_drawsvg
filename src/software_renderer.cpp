@@ -447,7 +447,22 @@ void SoftwareRendererImp::rasterize_image( float x0, float y0,
                                            Texture& tex ) {
   // Task ?:
   // Implement image rasterization
+  x0 *= sample_rate;
+  y0 *= sample_rate;
+  x1 *= sample_rate;
+  y1 *= sample_rate;
+  Color color;
+  float xlen = x1 - x0;
+  float ylen = y1 - y0;
+  for (int x = floor(x0); x <= round(x1 + 0.5); x++) {
+    for (int y = floor(y0); y <= round(y1 + 0.5); y++) {
+      color = sampler->sample_nearest(tex, (x - x0) / xlen, (y - y0) / ylen);
+      set_sample_buf(x, y, color);
+    }
+  }
+  // printf("%.4f %.4f %.4f %.4f\n", x0, y0, x1, y1);
 
+  // printf("%d %d\n", tex.width, tex.height);
 }
 
 // resolve samples to render target

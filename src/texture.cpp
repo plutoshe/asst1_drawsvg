@@ -26,8 +26,8 @@ inline void float_to_uint8( unsigned char* dst, float src[4] ) {
 
 void Sampler2DImp::generate_mips(Texture& tex, int startLevel) {
 
-  // NOTE(sky): 
-  // The starter code allocates the mip levels and generates a level 
+  // NOTE(sky):
+  // The starter code allocates the mip levels and generates a level
   // map simply fills each level with a color that differs from its
   // neighbours'. The reference solution uses trilinear filtering
   // and it will only work when you have mipmaps.
@@ -36,7 +36,7 @@ void Sampler2DImp::generate_mips(Texture& tex, int startLevel) {
 
   // check start level
   if ( startLevel >= tex.mipmap.size() ) {
-    std::cerr << "Invalid start level"; 
+    std::cerr << "Invalid start level";
   }
 
   // allocate sublevels
@@ -77,30 +77,41 @@ void Sampler2DImp::generate_mips(Texture& tex, int startLevel) {
 
 }
 
-Color Sampler2DImp::sample_nearest(Texture& tex, 
-                                   float u, float v, 
+Color Sampler2DImp::sample_nearest(Texture& tex,
+                                   float u, float v,
                                    int level) {
 
   // Task ?: Implement nearest neighbour interpolation
-  
+
   // return magenta for invalid level
-  return Color(1,0,1,1);
+  MipLevel& mip = tex.mipmap[level];
+  int x = floor(mip.width * u);
+  int y = floor(mip.height * v);
+  Color color;
+  float dst[4];
+  uint8_to_float(&dst[0], &mip.texels[4 * (mip.width * y + x)]);
+  color.r = dst[0];
+  color.g = dst[1];
+  color.b = dst[2];
+  color.a = dst[3];
+  return color;
 
 }
 
-Color Sampler2DImp::sample_bilinear(Texture& tex, 
-                                    float u, float v, 
+Color Sampler2DImp::sample_bilinear(Texture& tex,
+                                    float u, float v,
                                     int level) {
-  
+
   // Task ?: Implement bilinear filtering
 
   // return magenta for invalid level
+
   return Color(1,0,1,1);
 
 }
 
-Color Sampler2DImp::sample_trilinear(Texture& tex, 
-                                     float u, float v, 
+Color Sampler2DImp::sample_trilinear(Texture& tex,
+                                     float u, float v,
                                      float u_scale, float v_scale) {
 
   // Task 8: Implement trilinear filtering
