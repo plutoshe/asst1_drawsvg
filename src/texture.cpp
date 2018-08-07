@@ -46,7 +46,15 @@ void Sampler2DImp::generate_mips(Texture& tex, int startLevel) {
 
   numSubLevels = min(numSubLevels, kMaxMipLevels - startLevel - 1);
   tex.mipmap.resize(startLevel + numSubLevels + 1);
-
+  // MipLevel& mi = tex.mipmap[0];
+  // for (int i = 0; i < tex.mipmap[0].height; i++) {
+  //   for (int j = 0; j < tex.mipmap[0].width; j++) {
+  //     for (int k = 0; k < 4; k++) {
+  //       printf("%.2hhu ", mi.texels[4 * (mi.width * i + j) + k]);
+  //     }
+  //     printf("\n");
+  //   }
+  // }
   int width  = baseWidth;
   int height = baseHeight;
   for (int i = 1; i <= numSubLevels; i++) {
@@ -65,16 +73,26 @@ void Sampler2DImp::generate_mips(Texture& tex, int startLevel) {
 
   // fill all 0 sub levels with interchanging colors
   Color colors[3] = { Color(1,0,0,1), Color(0,1,0,1), Color(0,0,1,1) };
+
   for(size_t i = 1; i < tex.mipmap.size(); ++i) {
 
-    Color c = colors[i % 3];
+    MipLevel& above_mip = tex.mipmap[i - 1];
     MipLevel& mip = tex.mipmap[i];
+    // printf("above_mip: %d %d\n", above_mip.width, above_mip.height);
+    // printf("mip: %d %d\n", mip.width, mip.height);
 
-    for(size_t i = 0; i < 4 * mip.width * mip.height; i += 4) {
-      float_to_uint8( &mip.texels[i], &c.r );
+    for (int y = 0; y < mip.height; y++) {
+      for (int x = 0; x < mip.width; x++) {
+        for (int k = 0; k < 4; k++) {
+          mip.texels[4 * (y * mip.width + x) + k] =
+            (above_mip.texels[4 * (2 * y * above_mip.width + x * 2) + k] +
+             above_mip.texels[4 * ((2 * y + 1) * above_mip.width + x * 2) + k] +
+             above_mip.texels[4 * (2 * y * above_mip.width + x * 2 + 1) + k] +
+             above_mip.texels[4 * ((2 * y + 1) * above_mip.width + x * 2 + 1) + k]) /4;
+        }
+      }
     }
   }
-
 }
 
 Color Sampler2DImp::sample_nearest(Texture& tex,
@@ -87,7 +105,7 @@ Color Sampler2DImp::sample_nearest(Texture& tex,
   if ( level >= tex.mipmap.size() ) {
     std::cerr << "Invalid start level";
   }
-
+  // printf("%.2f %.2f\n", u, v);
   MipLevel& mip = tex.mipmap[level];
   int x = floor(mip.width * u);
   int y = floor(mip.height * v);
@@ -149,8 +167,25 @@ Color Sampler2DImp::sample_trilinear(Texture& tex,
   // then bilinear sample the floor(level) and ceil(level).
   // then linear interpolate between those two colors based on where
   // the float level falls between floor and ceiling.
-  return Color(1,0,1,1);
 
+  float min_pixel_represtation = min(u_scale, v_scale);
+  if (min_pixel_represtation >= tex.mipmap[0].height) {
+    return sample_bilinear(tex, u, v, 0);
+  }
+
+  for (int level = 1; level < tex.mipmap.size(); level++) {
+    if (min_pixel_represtation >= tex.mipmap[level].height) {
+      // printf("level: %d\n", level);
+      Color result_floor = sample_bilinear(tex, u, v, level);
+      Color result_ceil = sample_bilinear(tex, u, v, level - 1);
+
+      int size_floor = tex.mipmap[level].height;
+      int size_ceil = tex.mipmap[level - 1].height;
+      float ratio = (min_pixel_represtation - size_floor) / (size_ceil - size_floor);
+      return result_floor * (1 - ratio) + result_ceil * ratio;
+    }
+  }
+  return sample_bilinear(tex, u, v, tex.mipmap.size());
 }
 
 } // namespace CMU462

@@ -474,9 +474,14 @@ void SoftwareRendererImp::rasterize_image( float x0, float y0,
   Color color;
   float xlen = x1 - x0;
   float ylen = y1 - y0;
+  printf("%.2f %.2f %.2lu %.2lu\n", xlen, ylen, tex.height, tex.width);
   for (int x = floor(x0); x <= round(x1 + 0.5); x++) {
     for (int y = floor(y0); y <= round(y1 + 0.5); y++) {
-      color = sampler->sample_bilinear(tex, (x - x0) / xlen, (y - y0) / ylen);
+      color = sampler->sample_trilinear(tex, (x - x0) / xlen, (y - y0) / ylen, xlen, ylen);
+
+      // sampler->sample_nearest(tex, (x - x0) / xlen, (y - y0) / ylen, 1);
+
+      // color = sampler->sample_bilinear(tex, (x - x0) / xlen, (y - y0) / ylen, 1);
       set_sample_buf(x, y, color);
     }
   }
