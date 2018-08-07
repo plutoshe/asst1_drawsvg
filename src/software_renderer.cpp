@@ -11,6 +11,34 @@ using namespace std;
 
 namespace CMU462 {
 
+float cross(float x0, float y0, float x1, float y1, float x2, float y2) {
+  return (x0 - x2) * (y1 - y2) - (y0 - y2) * (x1 - x2);
+}
+
+float delta = 1e-8;
+
+int eps(float x) {
+  if (x > delta) return 1;
+  if (x < -delta) return -1;
+  return 0;
+}
+
+bool inTriangle(float x, float y,
+                float x0, float y0,
+                float x1, float y1,
+                float x2, float y2) {
+  int d1 = eps(cross(x, y, x1, y1, x0, y0));
+  int d2 = eps(cross(x, y, x2, y2, x1, y1));
+  int d3 = eps(cross(x, y, x0, y0, x2, y2));
+  return (((d1 >= 0) && (d2 >= 0) && (d3 >= 0)) ||
+          ((d1 <= 0) && (d2 <= 0) && (d3 <= 0)));
+}
+
+float dist(float x0, float y0,
+           float x1, float y1) {
+  return sqrt((x0 - x1) * (x0 - x1) + (y0 - y1) * (y0 - y1));
+}
+
 
 // Implements SoftwareRenderer //
 
@@ -18,7 +46,7 @@ void SoftwareRendererImp::draw_svg( SVG& svg ) {
   if (this->super_sample_buffer != NULL) {
     free(this->super_sample_buffer);
   }
-  this->super_sample_buffer = this->create_supersampling_buf();
+  this->super_sample_buffer = this->create_supersampling_buf(1.0);
   // set top level transformation
   transformation = canvas_to_screen;
 
@@ -54,7 +82,7 @@ void SoftwareRendererImp::set_sample_rate( size_t sample_rate ) {
   if (this->super_sample_buffer != NULL) {
     free(this->super_sample_buffer);
   }
-  this->super_sample_buffer = this->create_supersampling_buf();
+  this->super_sample_buffer = this->create_supersampling_buf(1.0);
 
 }
 
@@ -69,22 +97,24 @@ void SoftwareRendererImp::set_render_target( unsigned char* render_target,
   if (this->super_sample_buffer != NULL) {
     free(this->super_sample_buffer);
   }
-  this->super_sample_buffer = this->create_supersampling_buf();
+  this->super_sample_buffer = this->create_supersampling_buf(1.0);
+  // this->super_sample_dep_buffer = this->create_supersampling_buf(0.0);
 }
 
-unsigned char* SoftwareRendererImp::create_supersampling_buf() {
+float* SoftwareRendererImp::create_supersampling_buf(float default_value) {
   int num_samples = this->sample_rate * this->sample_rate;
 
   size_t buf_size = num_samples * 4 * this->target_h * this->target_w;
   cout << "Buf size: " << buf_size << "\n";
-  unsigned char* buf = (unsigned char *) malloc(buf_size);
-
+  float* buf = (float*) malloc(buf_size * 4);
   if (buf == NULL) {
     cout << "malloc failed\n";
     exit(1);
   }
 
-  memset(buf, 255, buf_size);
+  for (int i = 0; i < buf_size; i++) {
+    buf[i] = default_value;
+  }
   return buf;
 }
 
@@ -195,6 +225,7 @@ void SoftwareRendererImp::draw_polygon( Polygon& polygon ) {
 
   Color c;
 
+
   // draw fill
   c = polygon.style.fillColor;
   if( c.a != 0 ) {
@@ -222,6 +253,8 @@ void SoftwareRendererImp::draw_polygon( Polygon& polygon ) {
       rasterize_line( p0.x, p0.y, p1.x, p1.y, c );
     }
   }
+
+
 }
 
 void SoftwareRendererImp::draw_ellipse( Ellipse& ellipse ) {
@@ -265,8 +298,12 @@ void SoftwareRendererImp::rasterize_point( float x, float y, Color color ) {
   // fill sample - NOT doing alpha blending!
   for (int i = 0; i < sample_rate; i++)
     for (int j = 0; j < sample_rate; j++)
-      set_sample_buf(sx+i, sy+j, color);
+      set_sample_buf(sx + i, sy + j, color);
 
+}
+
+float over(float c1, float c2, float a) {
+  return c2 * a + c1 * (1 - a);
 }
 
 void SoftwareRendererImp::set_sample_buf(int x, int y, Color color) {
@@ -276,17 +313,41 @@ void SoftwareRendererImp::set_sample_buf(int x, int y, Color color) {
   // check bounds
   if ( x < 0 || x >= target_w * sample_rate) return;
   if ( y < 0 || y >= target_h * sample_rate) return;
-  super_sample_buffer[4 * (x + y * target_w * sample_rate)] = (uint8_t) (color.r * 255);
-  super_sample_buffer[4 * (x + y * target_w * sample_rate) + 1] = (uint8_t) (color.g * 255);
-  super_sample_buffer[4 * (x + y * target_w * sample_rate) + 2] = (uint8_t) (color.b * 255);
-  super_sample_buffer[4 * (x + y * target_w * sample_rate) + 3] = (uint8_t) (color.a * 255);
+  int id = 4 * (x + y * target_w * sample_rate);
+  // super_sample_buffer[id] = color.r;
+  // super_sample_buffer[id + 1] = color.g;
+  // super_sample_buffer[id + 2] = color.b;
+  // super_sample_buffer[id + 3] = color.a;
+  // Er, Eg, Eb    - Element color value
+  // Ea            - Element alpha value
+  // Cr, Cg, Cb    - Canvas color value (before blending)
+  // Ca            - Canvas alpha value (before blending)
+  // Cr', Cg', Cb' - Canvas color value (after blending)
+  // Ca'           - Canvas alpha value (after blending)
+
+  // Ca' = 1 - (1 - Ea) * (1 - Ca)
+  // Cr' = (1 - Ea) * Cr + Er
+  // Cg' = (1 - Ea) * Cg + Eg
+  // Cb' = (1 - Ea) * Cb + Eb
+  // if (mode == 0) {
+  //   super_sample_buffer[id] = color.r * color.a;
+  //   super_sample_buffer[id + 1] = color.g * color.a;
+  //   super_sample_buffer[id + 2] = color.b * color.a;
+  //   super_sample_buffer[id + 3] = 1;
+  // } else {
+  float origin_alpha = super_sample_buffer[id + 3];
+  super_sample_buffer[id]     = over(super_sample_buffer[id], color.r, color.a);
+  super_sample_buffer[id + 1] = over(super_sample_buffer[id + 1], color.g, color.a);
+  super_sample_buffer[id + 2] = over(super_sample_buffer[id + 2], color.b, color.a);
+  super_sample_buffer[id + 3] = 1;
+  // }
 }
 
 
 
 Color convertColor(Color origin, float brightness) {
-  origin = Color::White * (1-brightness) + origin * brightness;
-
+  origin =  origin * brightness;
+  origin.a = brightness;
   return origin;
 }
 
@@ -309,7 +370,6 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
   x1 *= sample_rate;
   y1 *= sample_rate;
   bool switchXYaxis = false;
-  // printf("%.3f %.3f %.3f %.3f\n", x0, y0, x1, y1);
   if (abs(y0 - y1) > abs(x0 - x1)) {
     //drawline by y axis.(for y0 to y1)
     swap(x0, y0);
@@ -322,8 +382,6 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
     swap(x0, x1);
   }
 
-  // printf("convert to: %d %d %d %d\n", sx0, sy0, sx1, sy1);
-  // Color colour = Color.Black;
   float dx = x1 - x0,
         dy = y1 - y0;
   float gradient = 1.0;
@@ -331,16 +389,6 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
     gradient = dy / dx;
   int xpxl1, ypxl1;
   int xpxl2, ypxl2;
-  // if (dy == 0) {
-
-
-  //   if (floor(y0) != 640) {
-  //     return;
-  //   }
-  //   printf("%.4f %.4f %.4f %.4f %d\n", x0, y0, x1, y1, switchXYaxis);
-  // } else {
-  //   return;
-  // }
 
   float xend = round(x0);
   float yend = y0 + gradient * (xend - x0);
@@ -385,41 +433,12 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
   }
 }
 
-float cross(float x0, float y0, float x1, float y1, float x2, float y2) {
-  return (x0 - x2) * (y1 - y2) - (y0 - y2) * (x1 - x2);
-}
-
-float delta = 1e-8;
-
-int eps(float x) {
-  if (x > delta) return 1;
-  if (x < -delta) return -1;
-  return 0;
-}
-
-bool inTriangle(float x, float y,
-                float x0, float y0,
-                float x1, float y1,
-                float x2, float y2) {
-  int d1 = eps(cross(x, y, x1, y1, x0, y0));
-  int d2 = eps(cross(x, y, x2, y2, x1, y1));
-  int d3 = eps(cross(x, y, x0, y0, x2, y2));
-  return (((d1 >= 0) && (d2 >= 0) && (d3 >= 0)) ||
-          ((d1 <= 0) && (d2 <= 0) && (d3 <= 0)));
-}
-
-float dist(float x0, float y0,
-           float x1, float y1) {
-  return sqrt((x0 - x1) * (x0 - x1) + (y0 - y1) * (y0 - y1));
-}
-
 void SoftwareRendererImp::rasterize_triangle( float x0, float y0,
                                               float x1, float y1,
                                               float x2, float y2,
                                               Color color ) {
   // Task 2:
   // Implement triangle rasterization
-
   x0 *= sample_rate;
   y0 *= sample_rate;
   x1 *= sample_rate;
@@ -447,6 +466,7 @@ void SoftwareRendererImp::rasterize_image( float x0, float y0,
                                            Texture& tex ) {
   // Task ?:
   // Implement image rasterization
+  // printf("rasterize_image!\n");
   x0 *= sample_rate;
   y0 *= sample_rate;
   x1 *= sample_rate;
@@ -481,18 +501,18 @@ void SoftwareRendererImp::resolve( void ) {
         for (int x = 0; x < sample_rate; x++) {
           int buf_start_point = 4 * ((sy * sample_rate + y) * target_w * sample_rate + sx * sample_rate + x);
           // printf("%d %d %d %d %d %lu %d\n", target_w, sy, sx, y, x, super_sample_buffer.size(), buf_start_point);
-          a = super_sample_buffer[buf_start_point + 3] * 1.0 / 255;
+          a = super_sample_buffer[buf_start_point + 3];
           rsum += super_sample_buffer[buf_start_point] * a;
           gsum += super_sample_buffer[buf_start_point + 1] * a;
           bsum += super_sample_buffer[buf_start_point + 2] * a;
         }
       }
 
-      render_target[render_target_start_point] =  (uint8_t)(rsum / sample_num);
-      render_target[render_target_start_point + 1] = (uint8_t)(gsum / sample_num);
-      render_target[render_target_start_point + 2] = (uint8_t)(bsum / sample_num);
+      render_target[render_target_start_point] =  (uint8_t)(rsum * 255 / sample_num);
+      render_target[render_target_start_point + 1] = (uint8_t)(gsum * 255/ sample_num);
+      render_target[render_target_start_point + 2] = (uint8_t)(bsum * 255/ sample_num);
       render_target[render_target_start_point + 3] = 255;
-      // (uint8_t)(render_target[render_target_start_point ] * a + (rsum / sample_num) * (1 - a));
+      //  + (rsum / sample_num) * (1 - a));
       // render_target[render_target_start_point + 1] = (uint8_t)(render_target[render_target_start_point ] * a + (gsum / sample_num) * (1 - a));
       // render_target[render_target_start_point + 2] = (uint8_t)(render_target[render_target_start_point + 2] * a + (bsum / sample_num) * (1 - a));
 

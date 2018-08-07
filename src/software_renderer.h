@@ -78,12 +78,13 @@ class SoftwareRendererImp : public SoftwareRenderer {
   void set_render_target( unsigned char* target_buffer,
                           size_t width, size_t height );
  private:
-  unsigned char* super_sample_buffer;
+  float* super_sample_buffer;
+  // float* super_sample_dep_buffer;
 
 
   // Init //
   // allocates a buf of the correct size for the supersampling target
-  unsigned char* create_supersampling_buf();
+  float* create_supersampling_buf(float default_value);
   // Primitive Drawing //
 
   // Draws an SVG element
